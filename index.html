@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoNotebook // AI Sustainability Workspace</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- PDF.js for client-side PDF text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Custom styling & configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        sage: {
+                            50: '#f4f7f5',
+                            100: '#e6ece8',
+                            200: '#cedcd1',
+                            300: '#a7c1ad',
+                            400: '#7fa388',
+                            500: '#5c8466',
+                            600: '#47694f',
+                            700: '#3a5441',
+                            800: '#304435',
+                            900: '#28382d',
+                        },
+                        sand: {
+                            50: '#faf9f6',
+                            100: '#f5f2eb',
+                            200: '#e6dfd3',
+                            300: '#d1c4b2',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+    <style>
+        /* Smooth transitions */
+        .transition-all-300 {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cedcd1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a7c1ad;
+        }
+        /* Hide scrollbar utility */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        /* Highlight styling */
+        .highlight-yellow {
+            background-color: rgba(254, 240, 138, 0.6);
+            border-radius: 2px;
+        }
+        .highlight-green {
+            background-color: rgba(187, 247, 208, 0.6);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-sand-50 text-slate-800 font-sans h-screen flex flex-col overflow-hidden">
+
+    <!-- App Container -->
+    <div id="app" class="flex flex-1 overflow-hidden relative">
+
+        <!-- Sidebar -->
+        <aside class="w-80 bg-stone-900 text-stone-100 flex flex-col border-r border-stone-800 transition-all duration-300 z-20 flex-shrink-0" id="sidebar">
+            <!-- Brand Info -->
+            <div class="p-5 border-b border-stone-800 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-emerald-800 rounded-lg text-emerald-100">
+                        <i data-lucide="leaf" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-semibold tracking-tight text-white">EcoNotebook</h1>
+                        <p class="text-xs text-stone-400">Smart ESG Workspace</p>
+                    </div>
+                </div>
+                <button onclick="toggleSidebar()" class="lg:hidden text-stone-400 hover:text-white">
+                    <i data-lucide="chevrons-left" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Upload Panel -->
+            <div class="p-4 border-b border-stone-800">
+                <label for="doc-upload" class="flex flex-col items-center justify-center border border-dashed border-stone-700 hover:border-emerald-500 rounded-xl p-4 cursor-pointer hover:bg-stone-800/50 transition duration-150 group">
+                    <i data-lucide="upload-cloud" class="w-6 h-6 text-stone-400 group-hover:text-emerald-400 mb-2 transition"></i>
+                    <span class="text-xs font-medium text-stone-300 group-hover:text-white">Upload PDF, TXT or MD</span>
+                    <span class="text-[10px] text-stone-500 mt-1">Direct text extraction in-browser</span>
+                    <input type="file" id="doc-upload" class="hidden" multiple accept=".pdf,.txt,.md" onchange="handleFileUpload(event)">
+                </label>
+            </div>
+
+            <!-- Document Search -->
+            <div class="px-4 pt-4 pb-2">
+                <div class="relative">
+                    <i data-lucide="search" class="w-4 h-4 text-stone-500 absolute left-3 top-2.5"></i>
+                    <input type="text" id="doc-search" placeholder="Search library..." oninput="filterDocuments()" class="w-full bg-stone-800 border border-stone-700 rounded-lg pl-9 pr-3 py-1.5 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+            </div>
+
+            <!-- Document Library -->
+            <div class="flex-1 overflow-y-auto px-2 py-2" id="doc-list-container">
+                <div class="px-2 py-1 text-[11px] font-semibold tracking-wider uppercase text-stone-500 flex justify-between items-center">
+                    <span>Documents</span>
+                    <span id="doc-count" class="bg-stone-800 text-stone-400 px-1.5 py-0.5 rounded text-[10px]">0</span>
+                </div>
+                <!-- Interactive list dynamically rendered -->
+                <ul id="document-list" class="space-y-1 mt-2"></ul>
+            </div>
+
+            <!-- Global Insights & Compare Tools -->
+            <div class="p-3 bg-stone-950 border-t border-stone-800 space-y-1">
+                <button onclick="triggerComparison()" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-stone-300 hover:text-white hover:bg-stone-800 transition text-left">
+                    <i data-lucide="columns" class="w-4 h-4 text-emerald-400"></i>
+                    <span>Compare Documents</span>
+                </button>
+                <button onclick="triggerUniversalSearch()" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-stone-300 hover:text-white hover:bg-stone-800 transition text-left">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-emerald-400"></i>
+                    <span>Synthesize Global Insights</span>
+                </button>
+            </div>
+
+            <!-- API Configuration -->
+            <div class="p-4 border-t border-stone-800 bg-stone-950 text-xs">
+                <div class="flex items-center justify-between text-stone-400 mb-1">
+                    <span>Gemini API Integration</span>
+                    <span class="inline-flex w-2 h-2 rounded-full bg-emerald-500" id="api-status"></span>
+                </div>
+                <input type="password" id="api-key-input" placeholder="Custom API Key (Optional)" class="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-stone-300 placeholder-stone-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-[11px]" onchange="saveApiKey(this.value)">
+                <p class="text-[9px] text-stone-500 mt-1">Leaves empty for native workspace key usage.</p>
+            </div>
+        </aside>
+
+        <!-- Main Workspace Area -->
+        <main class="flex-1 flex flex-col min-w-0 bg-sand-50 relative overflow-hidden">
+            
+            <!-- Floating Menu Toggle for Mobile -->
+            <header class="bg-white border-b border-stone-200 p-3 flex items-center justify-between lg:hidden z-10">
+                <button onclick="toggleSidebar()" class="p-1.5 text-stone-600 hover:bg-stone-100 rounded-lg">
+                    <i data-lucide="menu" class="w-5 h-5"></i>
+                </button>
+                <span class="font-semibold text-sm text-stone-800">EcoNotebook</span>
+                <button onclick="toggleChat()" class="p-1.5 text-stone-600 hover:bg-stone-100 rounded-lg">
+                    <i data-lucide="message-square" class="w-5 h-5"></i>
+                </button>
+            </header>
+
+            <!-- Dashboard Welcome View (Visible if no doc is active) -->
+            <section id="welcome-view" class="flex-1 overflow-y-auto p-6 md:p-12 flex flex-col justify-center items-center max-w-4xl mx-auto w-full text-center space-y-8">
+                <div class="p-4 bg-emerald-50 rounded-full text-emerald-700 animate-pulse">
+                    <i data-lucide="globe" class="w-12 h-12"></i>
+                </div>
+                <div class="space-y-3">
+                    <h2 class="text-3xl md:text-4xl font-serif text-stone-950 tracking-tight">Your Smart Sustainability Workspace</h2>
+                    <p class="text-sm md:text-base text-stone-600 max-w-xl mx-auto font-light leading-relaxed">
+                        Upload corporate sustainability reports, environmental research, ESG metrics, or notes. Read cleanly, highlight insights, and get smart environmental assessments backed by AI.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mt-6 text-left">
+                    <div class="bg-white p-5 rounded-2xl border border-stone-200/60 shadow-sm hover:shadow-md transition cursor-pointer" onclick="loadSampleDoc(1)">
+                        <div class="flex items-center gap-2 mb-2 text-emerald-700">
+                            <i data-lucide="file-text" class="w-4 h-4"></i>
+                            <span class="text-xs font-semibold tracking-wider uppercase">Sample Report 01</span>
+                        </div>
+                        <h4 class="font-medium text-stone-900 text-sm mb-1">Patagonia Sustainability Strategy 2025</h4>
+                        <p class="text-xs text-stone-500 leading-normal line-clamp-2">Detailed overview of supply chain auditing, regenerative organic cotton transitions, and carbon pricing.</p>
+                    </div>
+                    
+                    <div class="bg-white p-5 rounded-2xl border border-stone-200/60 shadow-sm hover:shadow-md transition cursor-pointer" onclick="loadSampleDoc(2)">
+                        <div class="flex items-center gap-2 mb-2 text-emerald-700">
+                            <i data-lucide="file-text" class="w-4 h-4"></i>
+                            <span class="text-xs font-semibold tracking-wider uppercase">Sample Paper 02</span>
+                        </div>
+                        <h4 class="font-medium text-stone-900 text-sm mb-1">Decarbonizing Energy Grids (Review)</h4>
+                        <p class="text-xs text-stone-500 leading-normal line-clamp-2">Academic review analyzing nuclear, hydro, and wind grid stability profiles, transmission losses, and battery storage.</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 pt-4">
+                    <button onclick="document.getElementById('doc-upload').click()" class="px-5 py-2.5 bg-emerald-800 text-white rounded-xl text-xs font-medium hover:bg-emerald-900 transition flex items-center justify-center gap-2 shadow-sm">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        <span>Upload Your Own Document</span>
+                    </button>
+                    <button onclick="triggerUniversalSearch()" class="px-5 py-2.5 bg-stone-900 text-stone-100 rounded-xl text-xs font-medium hover:bg-stone-800 transition flex items-center justify-center gap-2 shadow-sm">
+                        <i data-lucide="sparkles" class="w-4 h-4 text-emerald-400"></i>
+                        <span>AI Global Strategy Generator</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Active Document Reader (Hidden by default) -->
+            <section id="reader-view" class="hidden flex-1 flex flex-col overflow-hidden">
+                <!-- Reader Navigation Header -->
+                <header class="bg-white border-b border-stone-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 flex-shrink-0">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-emerald-50 rounded-lg text-emerald-800">
+                            <i data-lucide="file-text" class="w-5 h-5" id="active-doc-icon"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-medium text-stone-950 text-sm md:text-base leading-snug line-clamp-1" id="active-doc-title">Document Title</h3>
+                            <div class="flex items-center gap-2 mt-0.5">
+                                <span class="text-[10px] bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono" id="active-doc-type">PDF</span>
+                                <span class="text-[10px] text-stone-400" id="active-doc-meta">Page count or Size</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Reader Interactive Actions -->
+                    <div class="flex items-center gap-2">
+                        <div class="flex bg-stone-100 rounded-xl p-0.5 text-xs text-stone-600">
+                            <button onclick="setReaderTab('read')" id="tab-btn-read" class="px-3 py-1.5 rounded-lg font-medium transition active bg-white text-stone-900 shadow-sm flex items-center gap-1.5">
+                                <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+                                <span>Read</span>
+                            </button>
+                            <button onclick="setReaderTab('insights')" id="tab-btn-insights" class="px-3 py-1.5 rounded-lg font-medium transition text-stone-500 hover:text-stone-900 flex items-center gap-1.5">
+                                <i data-lucide="badge-percent" class="w-3.5 h-3.5"></i>
+                                <span>ESG Insights</span>
+                            </button>
+                            <button onclick="setReaderTab('notes')" id="tab-btn-notes" class="px-3 py-1.5 rounded-lg font-medium transition text-stone-500 hover:text-stone-900 flex items-center gap-1.5">
+                                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                                <span>My Notes</span>
+                            </button>
+                        </div>
+                        
+                        <div class="h-6 w-px bg-stone-200 mx-1"></div>
+
+                        <button onclick="deleteActiveDocument()" class="p-2 hover:bg-red-50 hover:text-red-600 rounded-xl text-stone-400 transition" title="Delete Document">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Viewer Workspace Core Panels -->
+                <div class="flex-1 flex overflow-hidden">
+                    
+                    <!-- Tab Content: Reader/Viewer -->
+                    <div id="panel-read" class="flex-1 overflow-y-auto bg-white p-6 md:p-12 focus:outline-none relative">
+                        <!-- Toolbar overlay inside reader -->
+                        <div class="sticky top-0 bg-white/95 backdrop-blur-sm flex items-center justify-between pb-4 border-b border-stone-100 mb-6 z-10 text-xs text-stone-500">
+                            <div class="flex items-center gap-3">
+                                <button onclick="changeFontSize(-1)" class="p-1 hover:bg-stone-100 rounded transition" title="Decrease size">A-</button>
+                                <button onclick="changeFontSize(1)" class="p-1 hover:bg-stone-100 rounded transition" title="Increase size">A+</button>
+                                <span class="h-3 w-px bg-stone-200"></span>
+                                <span id="reader-stats" class="text-[10px] font-mono">Loading words...</span>
+                            </div>
+                            <!-- Inline Highlighting Tools -->
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px]">Select text to highlight or query assistant</span>
+                            </div>
+                        </div>
+
+                        <!-- Main content reading panel -->
+                        <div id="document-content-target" class="prose prose-stone max-w-2xl mx-auto leading-relaxed text-stone-800 transition-all duration-200" style="font-size: 15px;">
+                            <!-- Dynamically loaded text -->
+                        </div>
+                    </div>
+
+                    <!-- Tab Content: AI ESG & Sustainability Insights Dashboard -->
+                    <div id="panel-insights" class="hidden flex-1 overflow-y-auto p-6 md:p-10 bg-stone-50">
+                        <div class="max-w-3xl mx-auto space-y-6">
+                            
+                            <!-- Header status -->
+                            <div class="bg-white p-6 rounded-2xl border border-stone-200/60 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                <div>
+                                    <h4 class="font-medium text-stone-900 text-base mb-1">Autonomous ESG Extraction</h4>
+                                    <p class="text-xs text-stone-500">AI analyses the document context to identify key sustainability parameters.</p>
+                                </div>
+                                <button onclick="runAutoESGExtraction()" class="px-4 py-2 bg-emerald-800 hover:bg-emerald-950 text-white rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+                                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                                    <span>Run Smart Analysis</span>
+                                </button>
+                            </div>
+
+                            <!-- Smart Cards Grid -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="bg-white p-5 rounded-2xl border border-stone-200/60 shadow-sm space-y-3">
+                                    <div class="flex items-center gap-2 text-emerald-800 font-medium text-xs tracking-wider uppercase">
+                                        <i data-lucide="wind" class="w-4 h-4"></i>
+                                        <span>Carbon & Climate Commitments</span>
+                                    </div>
+                                    <div id="insight-carbon" class="text-xs text-stone-600 leading-relaxed font-light min-h-[80px]">
+                                        Click "Run Smart Analysis" to map GHG reduction trajectories, carbon neutrality targets, and Scope 1/2/3 transparency levels.
+                                    </div>
+                                </div>
+
+                                <div class="bg-white p-5 rounded-2xl border border-stone-200/60 shadow-sm space-y-3">
+                                    <div class="flex items-center gap-2 text-emerald-800 font-medium text-xs tracking-wider uppercase">
+                                        <i data-lucide="recycle" class="w-4 h-4"></i>
+                                        <span>Circular Economy & Materials</span>
+                                    </div>
+                                    <div id="insight-circular" class="text-xs text-stone-600 leading-relaxed font-light min-h-[80px]">
+                                        Click "Run Smart Analysis" to parse supply chain loop parameters, zero waste initiatives, and recycled/biodegradable material metrics.
+                                    </div>
+                                </div>
+
+                                <div class="bg-white p-5 rounded-2xl border border-stone-200/60 shadow-sm space-y-3">
+                                    <div class="flex items-center gap-2 text-amber-800 font-medium text-xs tracking-wider uppercase">
+                                        <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                                        <span>Greenwashing & Regulatory Risk</span>
+                                    </div>
+                                    <div id="insight-risk" class="text-xs text-stone-600 leading-relaxed font-light min-h-[80px]">
+                                        Click "Run Smart Analysis" to review potential sustainability overstatements, missing metrics, or environmental policy conflict risks.
+                                    </div>
+                                </div>
+
+                                <div class="bg-white p-5 rounded-2xl border border-stone-200/60 shadow-sm space-y-3">
+                                    <div class="flex items-center gap-2 text-emerald-800 font-medium text-xs tracking-wider uppercase">
+                                        <i data-lucide="trending-up" class="w-4 h-4"></i>
+                                        <span>Actionable Recommendations</span>
+                                    </div>
+                                    <div id="insight-recommendations" class="text-xs text-stone-600 leading-relaxed font-light min-h-[80px]">
+                                        Key strategic suggestions for improvements, validation strategies, or audit alignment metrics will appear here.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab Content: User Personal Notes / Interactive Highlights -->
+                    <div id="panel-notes" class="hidden flex-1 overflow-y-auto p-6 md:p-10 bg-white">
+                        <div class="max-w-2xl mx-auto space-y-6">
+                            <div class="flex items-center justify-between border-b border-stone-100 pb-4">
+                                <div>
+                                    <h4 class="font-medium text-stone-900">Your Document Synthesis Scratchpad</h4>
+                                    <p class="text-xs text-stone-500">Draft strategies, summarize key parts, or append references directly.</p>
+                                </div>
+                            </div>
+
+                            <textarea id="workspace-notes" oninput="saveActiveNotes(this.value)" class="w-full h-80 bg-stone-50 border border-stone-200 hover:border-stone-300 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 rounded-xl p-4 text-xs font-mono text-stone-800 leading-relaxed focus:outline-none" placeholder="Write down summaries, goals, ESG metrics checklist, or copy text here... Notes auto-save."></textarea>
+
+                            <div class="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100 flex items-start gap-3">
+                                <i data-lucide="info" class="w-4 h-4 text-emerald-800 mt-0.5"></i>
+                                <div class="text-xs text-emerald-950 leading-relaxed">
+                                    <strong>Tip:</strong> These notes are stored in your active session catalog. You can ask the AI Co-pilot to automatically reference your notes using the message panel!
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+        </main>
+
+        <!-- Right Side: AI Assistant Chat Co-pilot -->
+        <aside class="w-[380px] bg-stone-50 border-l border-stone-200 flex flex-col transition-all duration-300 z-10 flex-shrink-0" id="chat-sidebar">
+            <!-- Chat Header -->
+            <div class="p-4 bg-white border-b border-stone-200 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="p-1.5 bg-emerald-100 text-emerald-800 rounded-lg">
+                        <i data-lucide="bot" class="w-4 h-4"></i>
+                    </span>
+                    <div>
+                        <h4 class="font-medium text-xs text-stone-900 tracking-tight">AI Sustainability Assistant</h4>
+                        <div class="flex items-center gap-1">
+                            <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <span class="text-[9px] text-stone-500">Gemini 3 Flash Co-Pilot</span>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="toggleChat()" class="text-stone-400 hover:text-stone-600" title="Close chat panel">
+                    <i data-lucide="chevrons-right" class="w-4.5 h-4.5"></i>
+                </button>
+            </div>
+
+            <!-- Pre-engineered Query Shortcuts -->
+            <div class="p-3 bg-white border-b border-stone-100 grid grid-cols-2 gap-1.5">
+                <button onclick="sendQuickQuery('summarize')" class="text-left px-2.5 py-2 rounded-lg bg-stone-50 hover:bg-emerald-50 border border-stone-200/50 hover:border-emerald-200 text-[10px] text-stone-700 font-medium transition flex flex-col justify-between h-14">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-emerald-600"></i>
+                    <span>Summarize Document</span>
+                </button>
+                <button onclick="sendQuickQuery('extract_goals')" class="text-left px-2.5 py-2 rounded-lg bg-stone-50 hover:bg-emerald-50 border border-stone-200/50 hover:border-emerald-200 text-[10px] text-stone-700 font-medium transition flex flex-col justify-between h-14">
+                    <i data-lucide="target" class="w-3.5 h-3.5 text-emerald-600"></i>
+                    <span>Extract ESG Targets</span>
+                </button>
+                <button onclick="sendQuickQuery('greenwash')" class="text-left px-2.5 py-2 rounded-lg bg-stone-50 hover:bg-emerald-50 border border-stone-200/50 hover:border-emerald-200 text-[10px] text-stone-700 font-medium transition flex flex-col justify-between h-14">
+                    <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-amber-600"></i>
+                    <span>Critique Greenwashing</span>
+                </button>
+                <button onclick="sendQuickQuery('compare_all')" class="text-left px-2.5 py-2 rounded-lg bg-stone-50 hover:bg-emerald-50 border border-stone-200/50 hover:border-emerald-200 text-[10px] text-stone-700 font-medium transition flex flex-col justify-between h-14">
+                    <i data-lucide="combine" class="w-3.5 h-3.5 text-emerald-600"></i>
+                    <span>Cross-compare Docs</span>
+                </button>
+            </div>
+
+            <!-- Chat Message List -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+                <!-- System Greeting -->
+                <div class="flex gap-3">
+                    <div class="w-7 h-7 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">AI</div>
+                    <div class="space-y-1.5 max-w-[85%]">
+                        <div class="bg-white px-3.5 py-2.5 rounded-2xl rounded-tl-sm border border-stone-200/60 text-stone-700 leading-relaxed shadow-sm">
+                            Hello! I am your AI Sustainability Assistant. Select an active document from the library, or ask me questions about global environmental standards like GHG Protocols, SBTI targets, and ESG framework alignment.
+                        </div>
+                        <span class="text-[9px] text-stone-400 font-mono pl-1">EcoNotebook Co-Pilot</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Feedback Loading Panel -->
+            <div id="ai-loading" class="hidden px-4 py-2 bg-emerald-50/50 border-t border-emerald-100 flex items-center gap-2 text-emerald-800 text-[10px] font-mono animate-pulse">
+                <i data-lucide="loader" class="w-3 h-3 animate-spin"></i>
+                <span id="ai-loading-text">Synthesizing ecological context...</span>
+            </div>
+
+            <!-- Active context pill -->
+            <div class="px-3 py-1 bg-stone-100 border-t border-stone-200 text-[10px] text-stone-500 flex items-center justify-between">
+                <div class="flex items-center gap-1.5 truncate">
+                    <i data-lucide="layers" class="w-3 h-3 text-emerald-600"></i>
+                    <span id="chat-context-status" class="truncate font-light">Global context active (No individual document loaded)</span>
+                </div>
+            </div>
+
+            <!-- Input Panel -->
+            <div class="p-3 bg-white border-t border-stone-200">
+                <form id="chat-input-form" onsubmit="handleChatSubmit(event)" class="flex gap-2">
+                    <input type="text" id="chat-user-message" placeholder="Ask about ESG metrics, emissions targets..." class="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500">
+                    <button type="submit" class="p-2 bg-stone-900 text-stone-100 hover:bg-emerald-800 rounded-xl hover:text-white transition shadow-sm">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                    </button>
+                </form>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- UI Overlay Modals -->
+    <!-- Custom Document Comparer Modal -->
+    <div id="compare-modal" class="hidden fixed inset-0 bg-stone-950/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-stone-200 overflow-hidden flex flex-col">
+            <div class="p-5 border-b border-stone-100 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="columns" class="text-emerald-800 w-5 h-5"></i>
+                    <h3 class="font-semibold text-sm text-stone-950">AI Document Comparison</h3>
+                </div>
+                <button onclick="closeCompareModal()" class="text-stone-400 hover:text-stone-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-5 space-y-4 flex-1">
+                <p class="text-xs text-stone-500">Compare core emissions targets, carbon offset programs, and transparency guidelines across uploaded items.</p>
+                <div class="space-y-2">
+                    <label class="block text-[11px] font-medium text-stone-700">Select Document A</label>
+                    <select id="compare-select-a" class="w-full bg-stone-50 border border-stone-200 rounded-lg p-2 text-xs focus:outline-none focus:border-emerald-500"></select>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-[11px] font-medium text-stone-700">Select Document B</label>
+                    <select id="compare-select-b" class="w-full bg-stone-50 border border-stone-200 rounded-lg p-2 text-xs focus:outline-none focus:border-emerald-500"></select>
+                </div>
+            </div>
+            <div class="p-4 bg-stone-50 border-t border-stone-100 flex justify-end gap-2">
+                <button onclick="closeCompareModal()" class="px-4 py-2 border border-stone-200 text-stone-600 hover:bg-stone-100 rounded-xl text-xs font-medium">Cancel</button>
+                <button onclick="executeComparison()" class="px-4 py-2 bg-emerald-800 hover:bg-emerald-950 text-white rounded-xl text-xs font-medium">Compare with Gemini AI</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Smart Global synthesis modal -->
+    <div id="universal-modal" class="hidden fixed inset-0 bg-stone-950/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-stone-200 overflow-hidden flex flex-col">
+            <div class="p-5 border-b border-stone-100 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="globe" class="text-emerald-800 w-5 h-5"></i>
+                    <h3 class="font-semibold text-sm text-stone-950">EcoNotebook Global Strategic Synthesizer</h3>
+                </div>
+                <button onclick="closeUniversalModal()" class="text-stone-400 hover:text-stone-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-5 space-y-3">
+                <p class="text-xs text-stone-500">EcoNotebook can analyze your entire library of sustainability materials to generate unified ESG strategy vectors, identify shared weaknesses, or synthesize best practices.</p>
+                <div class="space-y-2">
+                    <label class="block text-[11px] font-medium text-stone-700">What target output fits your goal?</label>
+                    <div class="space-y-2 text-xs">
+                        <label class="flex items-start gap-3 p-2.5 rounded-xl border border-stone-200 hover:bg-emerald-50/50 cursor-pointer transition">
+                            <input type="radio" name="synthesis-target" value="shared_targets" checked class="mt-0.5 text-emerald-800 focus:ring-emerald-800">
+                            <div>
+                                <span class="font-medium text-stone-900 block">Unified ESG Policy & Matrix</span>
+                                <span class="text-stone-500 text-[10px]">Harmonizes common corporate emissions and targets across all files.</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 p-2.5 rounded-xl border border-stone-200 hover:bg-emerald-50/50 cursor-pointer transition">
+                            <input type="radio" name="synthesis-target" value="gap_analysis" class="mt-0.5 text-emerald-800 focus:ring-emerald-800">
+                            <div>
+                                <span class="font-medium text-stone-900 block">Global Vulnerability & Gap Audit</span>
+                                <span class="text-stone-500 text-[10px]">Critically examines potential vulnerabilities and inconsistencies between reports.</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 bg-stone-50 border-t border-stone-100 flex justify-end gap-2">
+                <button onclick="closeUniversalModal()" class="px-4 py-2 border border-stone-200 text-stone-600 hover:bg-stone-100 rounded-xl text-xs font-medium">Cancel</button>
+                <button onclick="executeSynthesis()" class="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-medium">Synthesize Library</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS Logic Block -->
+    <script>
+
+        // Application Database / Workspace state
+        const state = {
+            documents: [],
+            activeDocId: null,
+            readerFontSize: 15,
+            readerTab: 'read', // 'read' | 'insights' | 'notes'
+            apiKey: localStorage.getItem('econotebook_gemini_key') || '',
+            chatHistory: []
+        };
+
+        // Standard preloaded sustainability data for smooth onboarding
+        const sampleDocuments = [
+            {
+                id: "sample_01",
+                title: "Patagonia Sustainability Strategy 2025",
+                type: "PDF",
+                size: "420 KB",
+                content: `### Patagonia ESG Roadmap & Supply Chain Audit 2025
+
+#### Executive Summary
+Patagonia continues its commitment to planetary boundaries. This document outlines our transitions to 100% regenerative agriculture, zero reliance on virgin petroleum products, and our verified SBTi emissions pathways.
+
+#### 1. Circularity & Materials Strategy
+Our goal is for all raw materials to be recycled, organic, or regenerative by late 2025. 
+- **Regenerative Organic Cotton (ROC):** We partner with 12,000 smallholder farmers globally to ensure carbon is drawn back down into the agricultural topsoils.
+- **Microplastic Mitigation:** All polyester fabrics are designed to minimize filament shedding.
+- **Worn Wear Integration:** Our garment buyback program prevented over 320 metric tons of garments from reaching landfills this fiscal quarter.
+
+#### 2. Greenhouse Gas Metrics
+Our SBTi-approved goals seek a 55% direct emissions reduction by 2030 (Scope 1 and 2) against a 2018 benchmark.
+- **Scope 1:** 4,120 MT CO2e (Mainly offices and warehouse HVAC systems).
+- **Scope 2:** 2,150 MT CO2e (Procured green electricity for retail fronts).
+- **Scope 3 (Supply Chain):** 112,500 MT CO2e. This remains our biggest environmental vector. To counter this, we enforce a mandatory $35/ton carbon surcharge on our Tier-1 fabric mills.
+
+#### 3. Environmental Justice and Governance
+1% of sales continue to support grassroots conservation initiatives. We have updated our vendor governance guidelines to ensure that clean energy mandates are strictly enforced across our manufacturing facilities in Southeast Asia.`,
+                notes: "Check Scope 3 emission targets and make sure our pricing matches Patagonia's voluntary carbon surcharge.",
+                insights: null // Will be generated on request
+            },
+            {
+                id: "sample_02",
+                title: "Decarbonizing Energy Grids (Review)",
+                type: "Research Paper",
+                size: "1.1 MB",
+                content: `# Academic Review: Clean Power Transitions and Decentralized Grid Integration
+
+#### Abstract
+Deep decarbonization of regional electricity distribution require systemic deployment of high-voltage direct current (HVDC) transmission architectures, coupled with multi-megawatt battery energy storage systems (BESS) and firm, low-carbon baseload supplies. This review examines thermal profiles and regional grid dynamics across multiple decarbonization configurations.
+
+#### 1. Baseline Renewable Intermittency Risks
+Wind and solar power production profiles exhibit seasonal and sub-hourly variability (the "duck curve"). To transition a grid past 80% non-fossil baseline, simple open-cycle gas turbines (OCGT) must be fully phased out and replaced by grid-forming inverters and energy storage technologies.
+- **Grid Inertia:** Traditional turbines provide mechanical inertia. Decoupled photovoltaic plants must mimic this using software control vectors.
+- **Long-Duration Energy Storage (LDES):** Traditional lithium-ion batteries fail to resolve seasonal energy deficits. This review advocates for hydrogen carriers, pumped hydro storage, and molten metal architectures.
+
+#### 2. Comparative Generation Capacities
+- **Onshore Wind:** High yield capacity factor, low landscape density requirement. Environmental risks include avian collisions and localized turbine acoustics.
+- **Nuclear Baseload:** Highly reliable, compact thermal signature. Major concerns involve high capital expenditures, multi-decade construction cycles, and fuel cycle governance.
+- **Utility Solar PV:** Extremely low costs ($0.02/kWh in optimal geographies), but significant land usage pressures, leading to land conversion impacts.`,
+                notes: "Useful arguments to justify high-voltage direct current grid upgrades for regional clean energy plans.",
+                insights: null
+            }
+        ];
+
+        // Initialize App on Window Load
+        window.onload = function() {
+            // Apply saved API key to UI if exists
+            if (state.apiKey) {
+                document.getElementById('api-key-input').value = state.apiKey;
+                setApiStatus(true);
+            }
+
+            // Load saved state or use default samples
+            const savedDocs = localStorage.getItem('econotebook_docs');
+            if (savedDocs) {
+                try {
+                    state.documents = JSON.parse(savedDocs);
+                } catch(e) {
+                    state.documents = [...sampleDocuments];
+                }
+            } else {
+                state.documents = [...sampleDocuments];
+                saveDocsToLocalStorage();
+            }
+
+            renderDocumentList();
+            lucide.createIcons();
+        };
+
+        // Helper to save documents state
+        function saveDocsToLocalStorage() {
+            localStorage.setItem('econotebook_docs', JSON.stringify(state.documents));
+        }
+
+        // Save Custom Gemini API key
+        function saveApiKey(key) {
+            state.apiKey = key;
+            localStorage.setItem('econotebook_gemini_key', key);
+            setApiStatus(!!key);
+        }
+
+        function setApiStatus(hasKey) {
+            const el = document.getElementById('api-status');
+            if (hasKey) {
+                el.className = "inline-flex w-2 h-2 rounded-full bg-emerald-500";
+            } else {
+                el.className = "inline-flex w-2 h-2 rounded-full bg-amber-500";
+            }
+        }
+
+
+        // Handles uploading multiple local files
+        async function handleFileUpload(event) {
+            const files = event.target.files;
+            if (!files.length) return;
+
+            showLoadingIndicator("Parsing uploaded files...");
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const extension = file.name.split('.').pop().toLowerCase();
+                let extractedText = "";
+
+                try {
+                    if (extension === 'pdf') {
+                        extractedText = await extractTextFromPDF(file);
+                    } else if (extension === 'txt' || extension === 'md') {
+                        extractedText = await file.text();
+                    } else {
+                        alert(`Unsupported file type: .${extension}. Please upload PDF, TXT or MD.`);
+                        continue;
+                    }
+
+                    // Push new document structure
+                    const newDoc = {
+                        id: 'doc_' + Date.now() + '_' + i,
+                        title: file.name.replace(/\.[^/.]+$/, ""), // remove extension
+                        type: extension.toUpperCase(),
+                        size: formatBytes(file.size),
+                        content: extractedText,
+                        notes: "",
+                        insights: null
+                    };
+
+                    state.documents.push(newDoc);
+                    saveDocsToLocalStorage();
+                } catch (err) {
+                    console.error("Error reading file:", file.name, err);
+                    alert(`Failed to extract text from ${file.name}. Ensure it is not password-protected or fully scanned images with no OCR layer.`);
+                }
+            }
+
+            renderDocumentList();
+            hideLoadingIndicator();
+            // Load last uploaded doc automatically
+            if (state.documents.length > 0) {
+                loadDocument(state.documents[state.documents.length - 1].id);
+            }
+        }
+
+        // Raw PDF.js extraction logic
+        function extractTextFromPDF(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async function() {
+                    try {
+                        const typedArray = new Uint8Array(this.result);
+                        const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+                        let fullText = "";
+                        
+                        // Extract text page by page
+                        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                            const page = await pdf.getPage(pageNum);
+                            const textContent = await page.getTextContent();
+                            const pageText = textContent.items.map(item => item.str).join(" ");
+                            fullText += `### Page ${pageNum}\n${pageText}\n\n`;
+                        }
+                        
+                        if (!fullText.trim()) {
+                            reject(new Error("No text found. PDF might be non-OCR image scan."));
+                        } else {
+                            resolve(fullText);
+                        }
+                    } catch (e) {
+                        reject(e);
+                    }
+                };
+                reader.onerror = e => reject(e);
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // Format raw sizes
+        function formatBytes(bytes, decimals = 1) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+
+        // Render document library inside sidebar
+        function renderDocumentList() {
+            const listEl = document.getElementById('document-list');
+            const searchVal = document.getElementById('doc-search').value.toLowerCase();
+            const counterEl = document.getElementById('doc-count');
+            
+            listEl.innerHTML = "";
+            let matchCount = 0;
+
+            state.documents.forEach(doc => {
+                if (searchVal && !doc.title.toLowerCase().includes(searchVal)) {
+                    return;
+                }
+                matchCount++;
+
+                const isActive = doc.id === state.activeDocId;
+                const activeClasses = isActive 
+                    ? "bg-emerald-900/50 text-white border-l-2 border-emerald-500" 
+                    : "text-stone-300 hover:bg-stone-800/60 hover:text-white";
+
+                const typeColor = doc.type === 'PDF' ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400';
+
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <button onclick="loadDocument('${doc.id}')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition flex items-center justify-between ${activeClasses}">
+                        <div class="flex items-center gap-2 truncate pr-1">
+                            <i data-lucide="file-text" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                            <span class="truncate">${doc.title}</span>
+                        </div>
+                        <span class="text-[9px] font-mono px-1 py-0.5 rounded ${typeColor} flex-shrink-0">${doc.type}</span>
+                    </button>
+                `;
+                listEl.appendChild(li);
+            });
+
+            counterEl.textContent = matchCount;
+            lucide.createIcons();
+        }
+
+        // Search filtering UI helper
+        function filterDocuments() {
+            renderDocumentList();
+        }
+
+        // Load active document content
+        function loadDocument(docId) {
+            state.activeDocId = docId;
+            const doc = state.documents.find(d => d.id === docId);
+            if (!doc) return;
+
+            // Display reading view panels
+            document.getElementById('welcome-view').classList.add('hidden');
+            document.getElementById('reader-view').classList.remove('hidden');
+
+            // Set document attributes
+            document.getElementById('active-doc-title').textContent = doc.title;
+            document.getElementById('active-doc-type').textContent = doc.type;
+            
+            // Calculate size or length description
+            const words = doc.content.split(/\s+/).length;
+            document.getElementById('active-doc-meta').textContent = `${words} words · ${doc.size || 'Text Source'}`;
+            document.getElementById('reader-stats').textContent = `Document Size: ${words} words`;
+
+            // Render Markdown text
+            const textContentTarget = document.getElementById('document-content-target');
+            textContentTarget.innerHTML = marked.parse(doc.content || "");
+
+            // Setup custom highlights behavior
+            setupHighlightListeners();
+
+            // Set Active Sidebar Style
+            renderDocumentList();
+
+            // Sync User Personal Notes input value
+            document.getElementById('workspace-notes').value = doc.notes || "";
+
+            // Sync ESG Insights UI panel if already precomputed
+            renderInsightsTab(doc);
+
+            // Update Chat context status pill
+            document.getElementById('chat-context-status').textContent = `Context active: "${doc.title}"`;
+
+            // Reset Tab UI selection
+            setReaderTab('read');
+            
+            // Close sidebar automatically on small viewports
+            if (window.innerWidth < 1024) {
+                toggleSidebar();
+            }
+        }
+
+        function deleteActiveDocument() {
+            if (!state.activeDocId) return;
+            if (confirm("Are you sure you want to remove this document from the library?")) {
+                state.documents = state.documents.filter(d => d.id !== state.activeDocId);
+                state.activeDocId = null;
+                saveDocsToLocalStorage();
+                renderDocumentList();
+
+                // Reset reading panel states
+                document.getElementById('welcome-view').classList.remove('hidden');
+                document.getElementById('reader-view').classList.add('hidden');
+                document.getElementById('chat-context-status').textContent = "Global context active (No individual document loaded)";
+            }
+        }
+
+        // Sample loader handler
+        function loadSampleDoc(index) {
+            if (index === 1) {
+                // Ensure sample exists in state
+                let doc = state.documents.find(d => d.id === 'sample_01');
+                if (!doc) {
+                    state.documents.push(sampleDocuments[0]);
+                    saveDocsToLocalStorage();
+                    renderDocumentList();
+                }
+                loadDocument('sample_01');
+            } else if (index === 2) {
+                let doc = state.documents.find(d => d.id === 'sample_02');
+                if (!doc) {
+                    state.documents.push(sampleDocuments[1]);
+                    saveDocsToLocalStorage();
+                    renderDocumentList();
+                }
+                loadDocument('sample_02');
+            }
+        }
+
+        // Tab Navigation
+        function setReaderTab(tab) {
+            state.readerTab = tab;
+            
+            // Toggle panels
+            document.getElementById('panel-read').classList.add('hidden');
+            document.getElementById('panel-insights').classList.add('hidden');
+            document.getElementById('panel-notes').classList.add('hidden');
+
+            // Reset tab button CSS
+            const btnRead = document.getElementById('tab-btn-read');
+            const btnIns = document.getElementById('tab-btn-insights');
+            const btnNotes = document.getElementById('tab-btn-notes');
+
+            [btnRead, btnIns, btnNotes].forEach(btn => {
+                btn.className = "px-3 py-1.5 rounded-lg font-medium transition text-stone-500 hover:text-stone-900";
+            });
+
+            // Activate chosen tab
+            if (tab === 'read') {
+                document.getElementById('panel-read').classList.remove('hidden');
+                btnRead.className = "px-3 py-1.5 rounded-lg font-medium transition bg-white text-stone-900 shadow-sm flex items-center gap-1.5";
+            } else if (tab === 'insights') {
+                document.getElementById('panel-insights').classList.remove('hidden');
+                btnIns.className = "px-3 py-1.5 rounded-lg font-medium transition bg-white text-stone-900 shadow-sm flex items-center gap-1.5";
+                
+                // If insights are empty, automatically propose auto extraction
+                const doc = state.documents.find(d => d.id === state.activeDocId);
+                if (doc && !doc.insights) {
+                    runAutoESGExtraction();
+                }
+            } else if (tab === 'notes') {
+                document.getElementById('panel-notes').classList.remove('hidden');
+                btnNotes.className = "px-3 py-1.5 rounded-lg font-medium transition bg-white text-stone-900 shadow-sm flex items-center gap-1.5";
+            }
+            lucide.createIcons();
+        }
+
+        // Reader controls
+        function changeFontSize(direction) {
+            state.readerFontSize = Math.max(12, Math.min(24, state.readerFontSize + direction));
+            document.getElementById('document-content-target').style.fontSize = `${state.readerFontSize}px`;
+        }
+
+        // Save custom notes per active document
+        function saveActiveNotes(text) {
+            if (!state.activeDocId) return;
+            const doc = state.documents.find(d => d.id === state.activeDocId);
+            if (doc) {
+                doc.notes = text;
+                saveDocsToLocalStorage();
+            }
+        }
+
+
+        // Text selections & highlight listeners
+        function setupHighlightListeners() {
+            const contentPanel = document.getElementById('document-content-target');
+            
+            contentPanel.onmouseup = function() {
+                const selection = window.getSelection();
+                const selectedText = selection.toString().trim();
+                
+                if (selectedText.length > 3) {
+                    // Create floating tooltip for immediate AI assist
+                    showHighlightTooltip(selectedText, selection);
+                } else {
+                    removeHighlightTooltip();
+                }
+            };
+        }
+
+        let floatingTooltip = null;
+
+        function showHighlightTooltip(selectedText, selection) {
+            removeHighlightTooltip();
+
+            // Calculate bounding box of coordinates
+            const range = selection.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+
+            floatingTooltip = document.createElement('div');
+            floatingTooltip.className = "fixed bg-stone-900 text-stone-100 p-1.5 rounded-xl shadow-xl border border-stone-800 flex items-center gap-1 z-50 text-xs transition duration-150";
+            
+            // Simple absolute positioning
+            floatingTooltip.style.top = `${rect.top + window.scrollY - 45}px`;
+            floatingTooltip.style.left = `${rect.left + window.scrollX + (rect.width / 2) - 100}px`;
+
+            floatingTooltip.innerHTML = `
+                <button id="highlight-query-btn" class="px-2 py-1 bg-emerald-800 hover:bg-emerald-950 text-white rounded text-[10px] font-semibold flex items-center gap-1">
+                    <i data-lucide="sparkles" class="w-3 h-3"></i>
+                    <span>Query AI</span>
+                </button>
+                <div class="h-4 w-px bg-stone-700"></div>
+                <button id="highlight-yellow-btn" class="px-2 py-1 hover:bg-stone-800 rounded text-[10px] flex items-center gap-1 text-yellow-300">
+                    <span class="w-2.5 h-2.5 bg-yellow-200 border border-yellow-400 rounded-full inline-block"></span>
+                    <span>Highlight</span>
+                </button>
+                <button id="highlight-clear-btn" class="px-1.5 py-1 hover:bg-stone-800 rounded text-[10px]">
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                </button>
+            `;
+
+            document.body.appendChild(floatingTooltip);
+            lucide.createIcons();
+
+            // Bind actions
+            document.getElementById('highlight-query-btn').onclick = () => {
+                const msgInput = document.getElementById('chat-user-message');
+                msgInput.value = `About this passage: "${selectedText}" -> Explain what this means in terms of sustainability:`;
+                msgInput.focus();
+                removeHighlightTooltip();
+                window.getSelection().removeAllRanges();
+            };
+
+            document.getElementById('highlight-yellow-btn').onclick = () => {
+                // Apply a styling highlight
+                const span = document.createElement('span');
+                span.className = "highlight-yellow px-0.5";
+                
+                try {
+                    range.surroundContents(span);
+                    // Sync HTML state
+                    const doc = state.documents.find(d => d.id === state.activeDocId);
+                    if (doc) {
+                        doc.content = contentPanel.innerHTML;
+                        saveDocsToLocalStorage();
+                    }
+                } catch(e) {
+                    alert("Unable to highlight selected markup. Try choosing standard paragraph sections.");
+                }
+                removeHighlightTooltip();
+                window.getSelection().removeAllRanges();
+            };
+
+            document.getElementById('highlight-clear-btn').onclick = () => {
+                removeHighlightTooltip();
+                window.getSelection().removeAllRanges();
+            };
+        }
+
+        function removeHighlightTooltip() {
+            if (floatingTooltip) {
+                floatingTooltip.remove();
+                floatingTooltip = null;
+            }
+        }
+
+
+        // Call Gemini 3 Flash to perform actual analysis and conversational QA
+        async function callGemini(systemPrompt, userQuery, responseMimeType = "text/plain") {
+            const apiKey = state.apiKey; // Native key fallback via Canvas injection or personal key
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                }
+            };
+
+            if (responseMimeType === "application/json") {
+                payload.generationConfig = {
+                    responseMimeType: "application/json"
+                };
+            }
+
+            // Execute Request with Exponential Backoff
+            let delay = 1000;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errText = await response.text();
+                        throw new Error(`API Error (HTTP ${response.status}): ${errText}`);
+                    }
+
+                    const result = await response.json();
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (text) {
+                        return text;
+                    } else {
+                        throw new Error("Empty candidate response received.");
+                    }
+                } catch (error) {
+                    if (attempt === 3) throw error;
+                    console.warn(`Gemini Request failed (attempt ${attempt}/3). Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; // exponential backoff delay doubling
+                }
+            }
+        }
+
+        // Automated structured ESG insights extraction
+        async function runAutoESGExtraction() {
+            if (!state.activeDocId) return;
+            const doc = state.documents.find(d => d.id === state.activeDocId);
+            if (!doc) return;
+
+            showLoadingIndicator("Analyzing document sustainability metrics...");
+
+            const systemPrompt = `You are a professional Sustainability auditor and ESG strategy planner. Parse the following document and output exact sustainability assessments strictly formatted as a JSON object with keys: "carbon_insights", "circular_insights", "risk_insights", and "actionable_recommendations". Give concrete details, quote target numbers where found, and provide a critical review of potential greenwashing or missing metrics if applicable.`;
+            
+            const userQuery = `Analyze this document for ESG insights:
+            Title: ${doc.title}
+            Content: ${doc.content.substring(0, 15000)} // safely truncate if highly massive to stay within payload limits`;
+
+            try {
+                const jsonText = await callGemini(systemPrompt, userQuery, "application/json");
+                const parsed = JSON.parse(jsonText);
+                
+                // Set parsed values to active document
+                doc.insights = {
+                    carbon: parsed.carbon_insights || "No direct GHG target or metrics recorded in text.",
+                    circular: parsed.circular_insights || "Circularity and raw material footprint parameters were not explicitly declared.",
+                    risks: parsed.risk_insights || "No concrete policy inconsistencies or greenwashing markers discovered.",
+                    recommendations: parsed.actionable_recommendations || "No actionable guidance can be parsed from context."
+                };
+
+                saveDocsToLocalStorage();
+                renderInsightsTab(doc);
+            } catch (err) {
+                console.error("ESG Extraction Failed", err);
+                alert("Failed to analyze ESG metrics. Verify your internet connection or try again.");
+            } finally {
+                hideLoadingIndicator();
+            }
+        }
+
+        // Updates Dashboard cards
+        function renderInsightsTab(doc) {
+            const carbonEl = document.getElementById('insight-carbon');
+            const circEl = document.getElementById('insight-circular');
+            const riskEl = document.getElementById('insight-risk');
+            const recsEl = document.getElementById('insight-recommendations');
+
+            if (doc.insights) {
+                carbonEl.innerHTML = `<p class="leading-relaxed text-stone-800">${doc.insights.carbon}</p>`;
+                circEl.innerHTML = `<p class="leading-relaxed text-stone-800">${doc.insights.circular}</p>`;
+                riskEl.innerHTML = `<p class="leading-relaxed text-stone-800">${doc.insights.risks}</p>`;
+                recsEl.innerHTML = `<p class="leading-relaxed text-stone-800">${doc.insights.recommendations}</p>`;
+            } else {
+                carbonEl.textContent = 'Click "Run Smart Analysis" to map GHG reduction trajectories, carbon neutrality targets, and Scope 1/2/3 transparency levels.';
+                circEl.textContent = 'Click "Run Smart Analysis" to parse supply chain loop parameters, zero waste initiatives, and recycled/biodegradable material metrics.';
+                riskEl.textContent = 'Click "Run Smart Analysis" to review potential sustainability overstatements, missing metrics, or environmental policy conflict risks.';
+                recsEl.textContent = 'Key strategic suggestions for improvements, validation strategies, or audit alignment metrics will appear here.';
+            }
+        }
+
+        // AI Chat Assistant Logic
+        async function handleChatSubmit(e) {
+            e.preventDefault();
+            const inputEl = document.getElementById('chat-user-message');
+            const prompt = inputEl.value.trim();
+            if (!prompt) return;
+
+            // Render user message immediately
+            appendChatMessage("user", prompt);
+            inputEl.value = "";
+
+            showLoadingIndicator("EcoNotebook is thinking...");
+
+            // Incorporate active document context if selected
+            let activeDocContext = "";
+            const activeDoc = state.documents.find(d => d.id === state.activeDocId);
+            if (activeDoc) {
+                activeDocContext = `You have access to an active workspace document:
+                ---
+                Document Title: ${activeDoc.title}
+                Content Summary/Text excerpt:
+                ${activeDoc.content.substring(0, 10000)}
+                ---
+                If the user asks questions referring to "this document", "this report", or "my file", rely strictly on the content above to formulate an accurate sustainability analysis. Avoid generic or fabricated metrics.`;
+            }
+
+            const systemPrompt = `You are a world-class AI Sustainability Assistant and carbon accounting specialist integrated inside "EcoNotebook". 
+            Your primary goal is to provide concise, factual, and actionable environmental policy guidance. 
+            ${activeDocContext}
+            Provide references to official guidelines (e.g. SBTI, GHG Protocol, CDP, TCFD, CSRD) when helpful. Keep answers engaging and format key tables or values cleanly in Markdown.`;
+
+            try {
+                const responseText = await callGemini(systemPrompt, prompt);
+                appendChatMessage("ai", responseText);
+            } catch (err) {
+                console.error("AI Assistant prompt failure", err);
+                appendChatMessage("ai", `I encountered an issue connecting to the Gemini 3 Flash engine. Error context: ${err.message}. If you have a custom key, please verify it is valid and configured correctly.`);
+            } finally {
+                hideLoadingIndicator();
+            }
+        }
+
+        // UI helper to append chat bubble
+        function appendChatMessage(sender, text) {
+            const container = document.getElementById('chat-messages');
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = "flex gap-3";
+
+            if (sender === 'user') {
+                bubbleDiv.innerHTML = `
+                    <div class="space-y-1 max-w-[85%] ml-auto flex flex-col items-end">
+                        <div class="bg-emerald-850 bg-emerald-800 text-white px-3.5 py-2.5 rounded-2xl rounded-tr-sm leading-relaxed shadow-sm">
+                            ${text}
+                        </div>
+                        <span class="text-[9px] text-stone-400 font-mono pr-1">You</span>
+                    </div>
+                `;
+            } else {
+                // Parse markdown text before rendering
+                const formattedHtml = marked.parse(text);
+                bubbleDiv.innerHTML = `
+                    <div class="w-7 h-7 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">AI</div>
+                    <div class="space-y-1.5 max-w-[85%]">
+                        <div class="bg-white px-3.5 py-2.5 rounded-2xl rounded-tl-sm border border-stone-200/60 text-stone-700 leading-relaxed shadow-sm prose prose-stone text-xs">
+                            ${formattedHtml}
+                        </div>
+                        <span class="text-[9px] text-stone-400 font-mono pl-1">EcoNotebook Co-Pilot</span>
+                    </div>
+                `;
+            }
+
+            container.appendChild(bubbleDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Send query presets
+        function sendQuickQuery(type) {
+            const activeDoc = state.documents.find(d => d.id === state.activeDocId);
+            if (!activeDoc && type !== 'compare_all') {
+                alert("Please select a document from the library first to query contextual targets.");
+                return;
+            }
+
+            let msg = "";
+            if (type === 'summarize') {
+                msg = `Can you synthesize a concise executive summary for this report, emphasizing emissions profiles, material strategies, and carbon transparency metrics?`;
+            } else if (type === 'extract_goals') {
+                msg = `Please extract all direct carbon, energy reduction, and ESG performance metrics mentioned in this file. Present them inside a clean Markdown evaluation table.`;
+            } else if (type === 'greenwash') {
+                msg = `Audit this report for greenwashing markers. Are there vague claims, missing direct Scope 3 pathways, or assertions not backed by third-party verification standards?`;
+            } else if (type === 'compare_all') {
+                triggerComparison();
+                return;
+            }
+
+            const inputEl = document.getElementById('chat-user-message');
+            inputEl.value = msg;
+            handleChatSubmit(new Event('submit'));
+        }
+
+        // Multi-document Compare Modals & Actions
+        function triggerComparison() {
+            if (state.documents.length < 2) {
+                alert("To compare, please upload at least 2 reports/documents into your EcoNotebook workspace.");
+                return;
+            }
+
+            const modal = document.getElementById('compare-modal');
+            const selectA = document.getElementById('compare-select-a');
+            const selectB = document.getElementById('compare-select-b');
+
+            selectA.innerHTML = "";
+            selectB.innerHTML = "";
+
+            state.documents.forEach((doc, idx) => {
+                const optA = document.createElement('option');
+                optA.value = doc.id;
+                optA.textContent = doc.title;
+                if (doc.id === state.activeDocId) optA.selected = true;
+
+                const optB = document.createElement('option');
+                optB.value = doc.id;
+                optB.textContent = doc.title;
+                // auto select next item for convenience
+                if (idx === 1 && doc.id !== state.activeDocId) optB.selected = true;
+
+                selectA.appendChild(optA);
+                selectB.appendChild(optB);
+            });
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeCompareModal() {
+            document.getElementById('compare-modal').classList.add('hidden');
+        }
+
+        async function executeComparison() {
+            const idA = document.getElementById('compare-select-a').value;
+            const idB = document.getElementById('compare-select-b').value;
+
+            if (idA === idB) {
+                alert("Please select two different documents to cross-examine.");
+                return;
+            }
+
+            closeCompareModal();
+            showLoadingIndicator("Cross-comparing ESG metrics...");
+
+            const docA = state.documents.find(d => d.id === idA);
+            const docB = state.documents.find(d => d.id === idB);
+
+            appendChatMessage("user", `Cross-compare "${docA.title}" with "${docB.title}"`);
+
+            const systemPrompt = `You are a leading ESG analyst performing environmental due diligence. Cross-examine the sustainability metrics, emissions transparency (Scope 1/2/3), and transition targets of the two provided corporate reports. Highlight gaps, highlight which entity demonstrates stronger transparency, and map them in a comparative markdown table.`;
+            const userQuery = `
+            Document A:
+            Title: ${docA.title}
+            Content excerpt: ${docA.content.substring(0, 8000)}
+
+            Document B:
+            Title: ${docB.title}
+            Content excerpt: ${docB.content.substring(0, 8000)}
+            `;
+
+            try {
+                const response = await callGemini(systemPrompt, userQuery);
+                appendChatMessage("ai", response);
+            } catch (err) {
+                appendChatMessage("ai", `Failed to compare files. Context: ${err.message}`);
+            } finally {
+                hideLoadingIndicator();
+            }
+        }
+
+        // Global library synthesis triggers
+        function triggerUniversalSearch() {
+            if (state.documents.length === 0) {
+                alert("Please load or upload some sustainability files into your EcoNotebook workspace first.");
+                return;
+            }
+            document.getElementById('universal-modal').classList.remove('hidden');
+        }
+
+        function closeUniversalModal() {
+            document.getElementById('universal-modal').classList.add('hidden');
+        }
+
+        async function executeSynthesis() {
+            const selectedRadio = document.querySelector('input[name="synthesis-target"]:checked');
+            const targetType = selectedRadio ? selectedRadio.value : 'shared_targets';
+
+            closeUniversalModal();
+            showLoadingIndicator("Synthesizing ecosystem library vectors...");
+
+            let combinedText = "";
+            state.documents.forEach((doc, idx) => {
+                combinedText += `\n\n--- Document ${idx+1}: ${doc.title} ---\n${doc.content.substring(0, 4000)}`;
+            });
+
+            let systemPrompt = "";
+            let prompt = "";
+
+            if (targetType === 'shared_targets') {
+                systemPrompt = `You are a strategic CSRD and SBTI policy planner. Consolidate carbon tracking indices, transition architectures, and targets across all uploaded reports to design a single, robust corporate ESG checklist matrix.`;
+                prompt = `Harmonize policies across these library inputs:\n${combinedText}`;
+                appendChatMessage("user", "Synthesize a Unified ESG Policy Matrix from my global library.");
+            } else {
+                systemPrompt = `You are an ESG Risk Auditor. Audit the combined reporting ecosystem for discrepancies, weak scientific assertions, greenwashing vulnerabilities, or gaps in direct carbon auditing.`;
+                prompt = `Execute audit across these library inputs:\n${combinedText}`;
+                appendChatMessage("user", "Execute Global Vulnerability and Policy Gap Analysis on my library.");
+            }
+
+            try {
+                const response = await callGemini(systemPrompt, prompt);
+                appendChatMessage("ai", response);
+            } catch(err) {
+                appendChatMessage("ai", `Could not generate library-wide synthesis. Details: ${err.message}`);
+            } finally {
+                hideLoadingIndicator();
+            }
+        }
+
+        // Loading and responsive animation utility
+        function showLoadingIndicator(text) {
+            document.getElementById('ai-loading-text').textContent = text;
+            document.getElementById('ai-loading').classList.remove('hidden');
+        }
+
+        function hideLoadingIndicator() {
+            document.getElementById('ai-loading').classList.add('hidden');
+        }
+
+        // Toggle Sidebar state
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar.classList.contains('-translate-x-full') || sidebar.style.marginLeft === '-320px') {
+                sidebar.classList.remove('-translate-x-full');
+                sidebar.style.marginLeft = '0px';
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                sidebar.style.marginLeft = '-320px';
+            }
+        }
+
+        // Toggle Chat Sidebar state (on small sizes)
+        function toggleChat() {
+            const chatSidebar = document.getElementById('chat-sidebar');
+            if (chatSidebar.classList.contains('hidden')) {
+                chatSidebar.classList.remove('hidden');
+            } else {
+                chatSidebar.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
